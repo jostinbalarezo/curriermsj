@@ -1,0 +1,176 @@
+================================================================================
+REGISTRO DE IMPLEMENTACIÓN — Currier_bot (WhatsApp)
+================================================================================
+Repo: https://github.com/jostinbalarezo/curriermsj
+================================================================================
+
+[2026-06-27 17:28] — INICIO DE IMPLEMENTACIÓN
+
+--------------------------------------------------------------------------------
+1. .env.example (NUEVO)
+--------------------------------------------------------------------------------
+- Archivo: bot-mensajeria/.env.example
+- Contiene todas las variables de entorno necesarias sin valores reales
+- Variables: WHATSAPP_TOKEN, PHONE_NUMBER_ID, WEBHOOK_VERIFY_TOKEN,
+  SUPABASE_URL, SUPABASE_KEY, URL_GOOGLE_SHEETS
+- WEBHOOK_VERIFY_TOKEN tiene valor default: curriermsj_secret
+
+--------------------------------------------------------------------------------
+2. config.py (REESCRITO)
+--------------------------------------------------------------------------------
+- Antes: tenía secrets hardcoded (token Telegram, Supabase URL/key,
+  Google Sheets URL) como fallbacks de os.getenv
+- Ahora:
+  - Usa python-dotenv (load_dotenv()) al inicio
+  - Todas las variables vienen de .env, sin fallbacks con secrets
+  - Eliminado TOKEN (Telegram), eliminado SUPABASE_TABLE
+  - Agregado: WHATSAPP_TOKEN, PHONE_NUMBER_ID, WEBHOOK_VERIFY_TOKEN
+  - Agregado: SUPABASE_TABLE_ENVIOS, SUPABASE_TABLE_ESTADO,
+    SUPABASE_TABLE_FAQ, SUPABASE_TABLE_REPORTES
+  - Agregado: WHATSAPP_API_URL (https://graph.facebook.com/v20.0)
+  - Cero secrets hardcoded
+
+--------------------------------------------------------------------------------
+3. requirements.txt (ACTUALIZADO)
+--------------------------------------------------------------------------------
+- Eliminado: python-telegram-bot>=21.0 (ya no usamos Telegram)
+- Eliminado: pytest>=8.0.0, pytest-asyncio>=0.23.0, pytest-mock>=3.12.0
+  (se crearán tests nuevos para WhatsApp)
+- Agregado: flask>=3.0.0, python-dotenv>=1.0.0, gunicorn>=21.0.0
+- Mantenido: httpx>=0.27.0, requests>=2.31.0
+
+--------------------------------------------------------------------------------
+4. .gitignore (NUEVO)
+--------------------------------------------------------------------------------
+- Archivo raíz: .gitignore
+- Ignora: __pycache__/, *.pyc, .env, .venv/, venv/, *.egg-info/,
+  dist/, build/, .pytest_cache/, *.log
+- Antes NO existía ningún .gitignore (había secrets en el repo)
+
+--------------------------------------------------------------------------------
+5. whatsapp_db.py (NUEVO — reemplaza db.py)
+--------------------------------------------------------------------------------
+- Antes: db.py usaba httpx.AsyncClient (async) y solo accedía a tabla envios
+- Ahora: whatsapp_db.py usa httpx.Client (sync, compatible con Flask)
+- Funciones:
+  - obtener_estado(phone_number) -> Lee estado_usuario de Supabase
+  - crear_estado(phone_number, paso, datos) -> Crea registro de estado
+  - actualizar_estado(phone_number, paso, datos) -> Actualiza paso y datos
+  - reset_estado(phone_number) -> Vuelve a paso "menu"
+  - obtener_datos_temp(phone_number) -> Lee JSONB de datos_temp
+  - guardar_datos_temp(phone_number, datos) -> Guarda JSONB
+  - buscar_faq(pregunta) -> Busca respuesta en tabla faq
+  - guardar_reporte(phone_number, descripcion) -> Inserta en reportes
+  - guardar_envio(datos) -> Inserta en envios (reemplazo de db.guardar_envio)
+  - obtener_envios_por_telefono(phone_number) -> Envíos de un usuario
+  - obtener_envio_por_id(envio_id) -> Un envío específico
+- datos_temp es JSONB, se serializa/deserializa con json.dumps/loads
+
+--------------------------------------------------------------------------------
+6. app.py (NUEVO — servidor Flask + webhook WhatsApp)
+--------------------------------------------------------------------------------
+- Flask app con 3 rutas:
+  - GET /webhook — Verificación de webhook de Meta
+  - POST /webhook — Recibe mensajes de WhatsApp
+  - GET /health — Health check
+- Maneja tipos de mensaje: text, interactive (button_reply, list_reply),
+  location, reaction
+- Estado almacenado en Supabase (estado_usuario), NO en memoria
+- Funciones de envío de mensaje WhatsApp:
+  - enviar_mensaje(to, texto) — Texto plano
+  - enviar_botones(to, texto, botones) — Botones Reply (max 3)
+  - enviar_lista(to, texto, titulo, opciones) — Lista desplegable (max 10)
+- Flujos implementados:
+  - MENU PRINCIPAL: 5 opciones con botones interactivos
+    1. 📦 Rastrear paquete
+    2. 🧾 Cotizar envío
+    3. 📋 Mis envíos
+    4. ❌ Reportar problema
+    5. 🧑‍💼 Hablar con agente
+  - RASTREAR: Ingresa código CUR-XXXXX, consulta Supabase
+  - COTIZAR: Origen (ubicación o texto) -> Destino -> Tipo -> Peso
+    -> Cotización estimada con precios mock -> Confirmar envío
+  - MIS ENVIOS: Lista envíos del teléfono desde Supabase
+  - REPORTAR: Guarda descripción en tabla reportes
+  - NUEVO ENVIO: Post-cotización, pide remitente, teléfono,
+    destinatario, teléfono dest, dirección destino, tipo paquete,
+    instrucciones, muestra resumen, confirma
+  - Botón "⬅️ Volver al menú" en todos los pasos
+  - FAQ fallback: si no reconoce input en menu, busca en tabla faq
+- Cotizaciones mock con diccionario COTIZACIONES (tipo × peso -> precio)
+- Tracking code automático: CUR-{ID:05d} (generado por trigger SQL)
+
+--------------------------------------------------------------------------------
+7. supabase_schema.sql (NUEVO)
+--------------------------------------------------------------------------------
+- Tabla estado_usuario:
+  phone_number (PK), paso_actual (default 'menu'),
+  datos_temp (JSONB default '{}'), updated_at (TIMESTAMPTZ)
+- Tabla faq:
+  id (SERIAL PK), pregunta, respuesta, categoria (default 'general')
+- Tabla reportes:
+  id (SERIAL PK), phone_number, descripcion, creado_en (TIMESTAMPTZ)
+- Alter tabla envios: agrega tracking_code TEXT, estado TEXT
+- Trigger generar_tracking_code: auto-genera CUR-XXXXX al insertar
+- RLS habilitado en todas las tablas nuevas
+- Políticas: service_role acceso total, anon solo lectura de faq
+- Datos iniciales de FAQ: 6 registros (horario, costo, tiempo entrega,
+  formas pago, cobertura, abono)
+
+--------------------------------------------------------------------------------
+8. LIMPIEZA DE CÓDIGO ZOMBIE (ELIMINADO)
+--------------------------------------------------------------------------------
+Archivos eliminados:
+  - bot.py (Telegram entry point — ya no se usa)
+  - db.py (async, solo envios — reemplazado por whatsapp_db.py)
+  - verificar_supabase.py (script de prueba — obsoleto)
+  - handlers/envio.py (Telegram ConversationHandler — obsoleto)
+  - handlers/__init__.py
+  - services/google_sheets.py (se puede reintegrar después)
+  - services/__init__.py
+  - __init__.py (vacío)
+  - tests/unit/test_config.py (tests de config vieja)
+  - tests/unit/test_db.py (tests de db.py vieja)
+  - tests/unit/test_handlers.py (tests de handlers Telegram)
+  - tests/requirements-test.txt
+  - tests/ directory completo
+
+--------------------------------------------------------------------------------
+9. BUG FIX: Secrets expuestos
+--------------------------------------------------------------------------------
+- ANTES: config.py tenía hardcoded:
+  - Token de Telegram: [ELIMINADO - rotar si ya fue público]
+  - Supabase URL: [ELIMINADO - rotar si ya fue público]
+  - Supabase Key: [ELIMINADO - rotar si ya fue público]
+  - Google Sheets URL: [ELIMINADO]
+- DESPUÉS: Todas las variables vienen de .env (no subido al repo)
+- .gitignore bloquea .env
+- IMPORTANTE: Si el repo ya fue público, ROTAR las credenciales
+
+--------------------------------------------------------------------------------
+10. ESTRUCTURA FINAL DEL PROYECTO
+--------------------------------------------------------------------------------
+curriermsj/
+  .gitignore
+  README.md
+  registro.txt  (este archivo)
+  bot-mensajeria/
+    .env.example
+    app.py           (Flask + webhook WhatsApp)
+    config.py        (variables de entorno)
+    whatsapp_db.py   (Supabase CRUD sync)
+    requirements.txt
+    supabase_schema.sql
+
+================================================================================
+PENDIENTES (para la otra persona)
+================================================================================
+1. Ejecutar supabase_schema.sql en SQL Editor de Supabase
+2. Crear .env con valores reales (copiar de .env.example)
+3. Configurar WhatsApp Business API en Meta Developers
+4. Configurar webhook en Meta: URL de ngrok + /webhook
+5. Agregar datos de FAQ adicionales en tabla faq
+6. ROTAR credenciales expuestas en commits anteriores
+7. Resolver RLS en tabla envios (agregar policy para service_role)
+8. Reintegrar Google Sheets si se necesita
+================================================================================
