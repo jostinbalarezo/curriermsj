@@ -8,3 +8,8 @@ dist/
 build/
 .pytest_cache/
 *.log
+node_modules/
+.idea/
+.env.local
+dashboard/.env
+dashboard/.env.local

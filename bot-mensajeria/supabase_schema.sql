@@ -51,6 +51,16 @@ ALTER TABLE envios ADD COLUMN IF NOT EXISTS instrucciones TEXT;
 ALTER TABLE envios ADD COLUMN IF NOT EXISTS chat_id INTEGER DEFAULT 0;
 ALTER TABLE envios ADD COLUMN IF NOT EXISTS creado_en TIMESTAMPTZ DEFAULT NOW();
 
+-- Tabla de clientes registrados
+CREATE TABLE IF NOT EXISTS clientes (
+    phone_number TEXT PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    apellido TEXT,
+    ciudad TEXT,
+    telefono_contacto TEXT,
+    registrado_en TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Tabla de estado por usuario (reemplaza ConversationHandler de Telegram)
 CREATE TABLE IF NOT EXISTS estado_usuario (
     phone_number TEXT PRIMARY KEY,
@@ -139,6 +149,12 @@ CREATE POLICY "Anon lectura faq" ON faq
 
 DROP POLICY IF EXISTS "Service role acceso total reportes" ON reportes;
 CREATE POLICY "Service role acceso total reportes" ON reportes
+    FOR ALL USING (auth.role() = 'service_role');
+
+ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role acceso total clientes" ON clientes;
+CREATE POLICY "Service role acceso total clientes" ON clientes
     FOR ALL USING (auth.role() = 'service_role');
 
 -- Datos iniciales de FAQ

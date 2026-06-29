@@ -29,11 +29,13 @@ WEBHOOK_VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "curriermsj_secret")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
+SUPABASE_TABLE_CLIENTES = "clientes"
 SUPABASE_TABLE_ENVIOS = "envios"
 SUPABASE_TABLE_ESTADO = "estado_usuario"
 SUPABASE_TABLE_FAQ = "faq"
 SUPABASE_TABLE_REPORTES = "reportes"
 
+WELCOME_IMAGE_URL = os.getenv("WELCOME_IMAGE_URL", "")
 URL_GOOGLE_SHEETS = os.getenv("URL_GOOGLE_SHEETS", "")
 
 WHATSAPP_API_URL = "https://graph.facebook.com/v20.0"

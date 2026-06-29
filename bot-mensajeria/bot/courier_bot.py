@@ -3,7 +3,8 @@ import re
 from datetime import datetime
 from typing import Any, Callable
 
-from bot.messages import Buttons, MessageTemplates, build_quote_options
+import config
+from bot.messages import LINE, Buttons, MessageTemplates, build_quote_options
 from domain.constants import (
     INSTRUCTIONS,
     PACKAGE_TYPES,
@@ -27,6 +28,11 @@ class CourierBot:
         self.repository = repository
         self.whatsapp = whatsapp
         self.handlers: dict[str, Callable[[IncomingMessage, str, dict[str, Any]], None]] = {
+            Step.WELCOME: self.handle_welcome,
+            Step.WELCOME_REGISTER: self.handle_welcome_register,
+            Step.WELCOME_APELLIDO: self.handle_welcome_apellido,
+            Step.WELCOME_CIUDAD: self.handle_welcome_ciudad,
+            Step.WELCOME_PHONE: self.handle_welcome_phone,
             Step.TRACKING_CODE: self.handle_tracking_code,
             Step.QUOTE_ORIGIN: self.handle_quote_origin,
             Step.QUOTE_DESTINATION: self.handle_quote_destination,
@@ -49,8 +55,13 @@ class CourierBot:
     def process(self, event: IncomingMessage) -> None:
         state = self.repository.get_user_state(event.phone_number)
         if not state:
-            self.repository.create_user_state(event.phone_number, Step.MENU, {})
-            self.send_menu(event.phone_number)
+            client = self.repository.get_client(event.phone_number)
+            if client:
+                self.repository.create_user_state(event.phone_number, Step.MENU, {})
+                self.send_menu(event.phone_number)
+            else:
+                self.repository.create_user_state(event.phone_number, Step.WELCOME, {})
+                self.send_welcome(event.phone_number)
             return
 
         action = normalize_action(event.text)
@@ -74,6 +85,90 @@ class CourierBot:
             return
 
         handler(event, action, data)
+
+    def send_welcome(self, phone_number: str) -> None:
+        if config.WELCOME_IMAGE_URL:
+            self.whatsapp.send_image(phone_number, config.WELCOME_IMAGE_URL, "")
+        self.whatsapp.send_buttons(
+            phone_number,
+            MessageTemplates.welcome(),
+            Buttons.WELCOME,
+            header="Bienvenido",
+            footer="Estamos para servirte",
+        )
+
+    def handle_welcome(self, event: IncomingMessage, action: str, data: dict[str, Any]) -> None:
+        phone = event.phone_number
+        if action == "quiero_info":
+            self.whatsapp.send_buttons(
+                phone,
+                MessageTemplates.welcome_info(),
+                Buttons.WELCOME,
+                header="CurrierMsj",
+                footer="Elige qué hacer",
+            )
+            return
+
+        if action == "iniciar_pedido":
+            self.repository.update_user_state(phone, Step.WELCOME_REGISTER, {})
+            self.whatsapp.send_buttons(
+                phone,
+                MessageTemplates.ask_welcome_name(),
+                Buttons.BACK,
+            )
+            return
+
+        self.repository.reset_user_state(phone)
+        self.send_menu(phone)
+
+    def handle_welcome_register(self, event: IncomingMessage, action: str, data: dict[str, Any]) -> None:
+        phone = event.phone_number
+        data["nombre"] = event.text.strip()
+        self.repository.update_user_state(phone, Step.WELCOME_APELLIDO, data)
+        self.whatsapp.send_buttons(
+            phone,
+            MessageTemplates.ask_welcome_apellido(),
+            Buttons.BACK,
+        )
+
+    def handle_welcome_apellido(self, event: IncomingMessage, action: str, data: dict[str, Any]) -> None:
+        phone = event.phone_number
+        data["apellido"] = event.text.strip()
+        self.repository.update_user_state(phone, Step.WELCOME_CIUDAD, data)
+        self.whatsapp.send_buttons(
+            phone,
+            MessageTemplates.ask_welcome_ciudad(),
+            Buttons.BACK,
+        )
+
+    def handle_welcome_ciudad(self, event: IncomingMessage, action: str, data: dict[str, Any]) -> None:
+        phone = event.phone_number
+        data["ciudad"] = event.text.strip()
+        self.repository.update_user_state(phone, Step.WELCOME_PHONE, data)
+        self.whatsapp.send_buttons(
+            phone,
+            MessageTemplates.ask_welcome_phone(),
+            Buttons.BACK,
+        )
+
+    def handle_welcome_phone(self, event: IncomingMessage, action: str, data: dict[str, Any]) -> None:
+        phone = event.phone_number
+        data["telefono_contacto"] = event.text.strip() or event.phone_number
+        self.repository.save_client(
+            phone_number=phone,
+            nombre=data.get("nombre", ""),
+            apellido=data.get("apellido", ""),
+            ciudad=data.get("ciudad", ""),
+            telefono_contacto=data["telefono_contacto"],
+        )
+        if config.WELCOME_IMAGE_URL:
+            self.whatsapp.send_image(phone, config.WELCOME_IMAGE_URL, "")
+        self.repository.reset_user_state(phone)
+        self.whatsapp.send_text(
+            phone,
+            MessageTemplates.welcome_complete(data.get("nombre", ""), data.get("apellido", "")),
+        )
+        self.send_menu(phone)
 
     def send_menu(self, phone_number: str) -> None:
         self.whatsapp.send_buttons(
@@ -252,7 +347,7 @@ class CourierBot:
             event.phone_number,
             MessageTemplates.quote_options(data, options),
             Buttons.SERVICES,
-            footer="Valores estimados",
+            footer="Valor por confirmar",
         )
 
     def handle_quote_service(
@@ -276,10 +371,9 @@ class CourierBot:
             return
 
         service = SHIPPING_SERVICES[service_id]
-        selected = options[service_id]
         data["servicio_envio"] = service["label"]
         data["entrega_estimada"] = service["eta"]
-        data["cotizacion"] = selected["price"]
+        data["cotizacion"] = None
         self.repository.update_user_state(event.phone_number, Step.QUOTE_SUMMARY, data)
         self.whatsapp.send_buttons(
             event.phone_number,
@@ -299,8 +393,18 @@ class CourierBot:
             self.send_menu(event.phone_number)
             return
 
+        client = self.repository.get_client(event.phone_number)
+        if client:
+            data["remitente"] = f"{client.get('nombre', '')} {client.get('apellido', '')}".strip()
+            data["telefono_remitente"] = client.get("telefono_contacto") or event.phone_number
+
         self.repository.update_user_state(event.phone_number, Step.NEW_SHIPMENT_NAME, data)
-        self.whatsapp.send_buttons(event.phone_number, MessageTemplates.ask_sender_name(), Buttons.BACK)
+
+        if client and data.get("remitente"):
+            self.repository.update_user_state(event.phone_number, Step.NEW_SHIPMENT_RECIPIENT, data)
+            self.whatsapp.send_buttons(event.phone_number, MessageTemplates.ask_recipient_name(), Buttons.BACK)
+        else:
+            self.whatsapp.send_buttons(event.phone_number, MessageTemplates.ask_sender_name(), Buttons.BACK)
 
     def handle_shipments_list(self, phone_number: str) -> None:
         shipments = self.repository.get_shipments_by_phone(phone_number)
@@ -474,7 +578,7 @@ class CourierBot:
             "hora_envio": now.strftime("%H:%M"),
             "instrucciones": data.get("instrucciones"),
             "servicio_envio": data.get("servicio_envio"),
-            "valor_cotizado": data.get("cotizacion"),
+            "valor_cotizado": None,
             "entrega_estimada": data.get("entrega_estimada"),
             "estado": "pendiente",
             "chat_id": 0,

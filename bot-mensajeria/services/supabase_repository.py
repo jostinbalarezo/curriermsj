@@ -25,6 +25,7 @@ class SupabaseRepository:
         self.table_estado = config.SUPABASE_TABLE_ESTADO
         self.table_faq = config.SUPABASE_TABLE_FAQ
         self.table_reportes = config.SUPABASE_TABLE_REPORTES
+        self.table_clientes = config.SUPABASE_TABLE_CLIENTES
 
     @property
     def headers(self) -> dict[str, str]:
@@ -34,6 +35,23 @@ class SupabaseRepository:
             "Content-Type": "application/json",
             "Prefer": "return=representation",
         }
+
+    def get_client(self, phone_number: str) -> Optional[dict[str, Any]]:
+        url = f"{self._table(self.table_clientes)}?phone_number=eq.{quote(phone_number)}&limit=1"
+        data = self._request("GET", url)
+        return data[0] if data else None
+
+    def save_client(self, phone_number: str, nombre: str, apellido: str = "", ciudad: str = "", telefono_contacto: str = "") -> dict[str, Any]:
+        payload = {
+            "phone_number": phone_number,
+            "nombre": nombre,
+            "apellido": apellido,
+            "ciudad": ciudad,
+            "telefono_contacto": telefono_contacto,
+            "registrado_en": datetime.utcnow().isoformat(),
+        }
+        data = self._request("POST", self._table(self.table_clientes), json=payload)
+        return data[0] if data else {}
 
     def get_user_state(self, phone_number: str) -> Optional[dict[str, Any]]:
         url = f"{self._table(self.table_estado)}?phone_number=eq.{quote(phone_number)}&limit=1"

@@ -129,4 +129,41 @@ def create_app(bot: CourierBot) -> Flask:
             }
         ), 200
 
+    @app.get("/api/envios")
+    def get_all_envios():
+        try:
+            url = f"{bot.repository._table(bot.repository.table_envios)}?select=*&order=creado_en.desc"
+            data = bot.repository._request("GET", url)
+            return jsonify(data), 200
+        except Exception as e:
+            logger.exception("Error al obtener envíos: %s", e)
+            return jsonify({"error": str(e)}), 500
+
+    @app.get("/api/system-stats")
+    def get_system_stats():
+        try:
+            clientes_url = f"{bot.repository._table(bot.repository.table_clientes)}?select=*"
+            estados_url = f"{bot.repository._table(bot.repository.table_estado)}?select=*"
+            reportes_url = f"{bot.repository._table(bot.repository.table_reportes)}?select=*&order=creado_en.desc"
+            
+            clientes = bot.repository._request("GET", clientes_url)
+            estados = bot.repository._request("GET", estados_url)
+            reportes = bot.repository._request("GET", reportes_url)
+            
+            return jsonify({
+                "clientes": clientes,
+                "estados": estados,
+                "reportes": reportes
+            }), 200
+        except Exception as e:
+            logger.exception("Error al obtener estadísticas del sistema: %s", e)
+            return jsonify({"error": str(e)}), 500
+
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        response.headers.add("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS")
+        return response
+
     return app
