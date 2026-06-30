@@ -1,51 +1,59 @@
-"""
-Tests unitarios para el módulo config.py
-"""
-
 import os
 import pytest
 
-# Simulación de variables de entorno para pruebas
+
 @pytest.fixture
 def mock_env(monkeypatch):
-    """Fixture para limpiar variables de entorno antes de cada test."""
-    # Eliminar variables existentes
     env_vars = [
-        "TELEGRAM_BOT_TOKEN", "SUPABASE_URL", "SUPABASE_KEY",
-        "URL_GOOGLE_SHEETS"
+        "WHATSAPP_TOKEN", "PHONE_NUMBER_ID", "WEBHOOK_VERIFY_TOKEN",
+        "SUPABASE_URL", "SUPABASE_KEY", "URL_GOOGLE_SHEETS",
     ]
     for var in env_vars:
         monkeypatch.delenv(var, raising=False)
 
 
 def test_config_default_values(mock_env):
-    """Verifica que las variables de configuración por defecto estén definidas."""
     import importlib
     import config
     importlib.reload(config)
-    
-    assert config.TOKEN is not None
-    assert config.SUPABASE_URL is not None
-    assert config.SUPABASE_KEY is not None
-    assert config.SUPABASE_TABLE == "envios"
-    assert config.URL_GOOGLE_SHEETS is not None
+
+    assert config.HOST == "0.0.0.0"
+    assert config.PORT == 5000
+    assert config.DEBUG is True
+    assert config.BUSINESS_NAME == "CurrierMsj"
+    assert config.BOT_NAME == "Rex"
+    assert config.ROUTE_LABEL == "EE.UU. -> Ecuador"
+    assert config.WEBHOOK_VERIFY_TOKEN == "curriermsj_secret"
+    assert config.SUPABASE_TABLE_ENVIOS == "envios"
+    assert config.SUPABASE_TABLE_ESTADO == "estado_usuario"
+    assert config.SUPABASE_TABLE_CLIENTES == "clientes"
+    assert config.SUPABASE_TABLE_FAQ == "faq"
+    assert config.SUPABASE_TABLE_REPORTES == "reportes"
+    assert config.WHATSAPP_API_URL == "https://graph.facebook.com/v20.0"
 
 
 def test_config_env_variables(monkeypatch):
-    """Verifica que se carguen variables de entorno correctamente."""
     import importlib
-    
-    # Establecer variables de entorno de prueba
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token_123")
+
+    monkeypatch.setenv("WHATSAPP_TOKEN", "wa_token_test")
+    monkeypatch.setenv("PHONE_NUMBER_ID", "123456789")
+    monkeypatch.setenv("WEBHOOK_VERIFY_TOKEN", "custom_token")
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "test_key_456")
-    monkeypatch.setenv("URL_GOOGLE_SHEETS", "https://test.sheets.com")
-    
-    # Recargar módulo para que lea las nuevas variables
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    monkeypatch.setenv("PORT", "8000")
+    monkeypatch.setenv("DEBUG", "false")
+    monkeypatch.setenv("BUSINESS_NAME", "TestCorp")
+
     import config
     importlib.reload(config)
-    
-    assert config.TOKEN == "test_token_123"
+
+    assert config.WHATSAPP_TOKEN == "wa_token_test"
+    assert config.PHONE_NUMBER_ID == "123456789"
+    assert config.WEBHOOK_VERIFY_TOKEN == "custom_token"
     assert config.SUPABASE_URL == "https://test.supabase.co"
     assert config.SUPABASE_KEY == "test_key_456"
-    assert config.URL_GOOGLE_SHEETS == "https://test.sheets.com"
+    assert config.HOST == "127.0.0.1"
+    assert config.PORT == 8000
+    assert config.DEBUG is False
+    assert config.BUSINESS_NAME == "TestCorp"

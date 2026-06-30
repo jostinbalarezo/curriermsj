@@ -1,39 +1,52 @@
 # CurrierMsj Dashboard
 
-Panel local para revisar el estado del bot courier.
+Panel administrativo para el bot courier CurrierMsj. Construido con **React 19 + Chakra UI (Horizon UI) + Vite + Recharts**.
 
-## Abrir
+## Vistas
+
+| Ruta | Vista | Descripción |
+|---|---|---|
+| `/admin/default` | Main Dashboard | KPIs de envíos, gráficos por día y tipo, tabla de envíos recientes |
+| `/admin/clientes` | Clientes | Todos los clientes con contador de envíos (total/pendientes), buscador |
+| `/admin/pendientes` | Envíos | Pestañas: Pendientes / En Ruta / Entregados con KPIs y tabla |
+| `/admin/reportes` | Reportes | Reportes e incidencias con pestañas Todos / Abiertos / Cerrados |
+| `/admin/observability` | Observabilidad | Latencia p99, throughput, errores, DB pool, servicios, CPU |
+
+## Requisitos
+
+- Node.js 20+
+- npm
+
+## Instalar y ejecutar
 
 ```bash
 cd dashboard
 npm install
-npm start
+npm run dev      # Servidor de desarrollo en http://localhost:5173
+npm run build    # Build de producción
+npm run lint     # Linter (oxlint)
 ```
 
-El navegador se abre en:
+## Variables de entorno
 
-```text
-http://localhost:5173/
-```
-
-Si no se abre solo, copia esa URL manualmente en Chrome o Edge.
-
-## Variables opcionales
-
-Copia `.env.example` como `.env` si quieres conectar servicios reales:
+Copia `.env.example` como `.env` (opcional, para datos reales):
 
 ```env
 VITE_BOT_HEALTH_URL=http://localhost:5000/health
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
 ```
 
-No pongas el token de WhatsApp en React. Ese token debe vivir solo en el backend Flask.
+Sin backend, las tablas se muestran vacías sin errores.
 
-## Estado de WhatsApp API
+## Stack
 
-El dashboard no llama a Meta Graph API desde el navegador porque eso expondria el token. Si WhatsApp falla, se revisa desde:
+- **React 19** + **Vite 8**
+- **Chakra UI v2** (tema Horizon UI, modo oscuro forzado)
+- **Recharts** (gráficos)
+- **react-icons/md** (iconos Material Design)
+- **react-router-dom v7** (ruteo)
 
-- Logs de Flask.
-- Variables `WHATSAPP_TOKEN` y `PHONE_NUMBER_ID`.
-- Endpoint seguro del backend si se agrega despues.
+## Notas
+
+- No se expone el token de WhatsApp en el frontend
+- Los datos se obtienen del backend Flask (`/api/envios`, `/api/system-stats`)
+- El modo oscuro es permanente (sin toggle a modo claro)
